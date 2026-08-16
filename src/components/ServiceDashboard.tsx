@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Siren, HeartPulse, Flame, AlertTriangle, CheckCheck, Send, Radio, Zap, ArrowLeft, Navigation, MapPin, Clock, Users, Camera, Map } from 'lucide-react'
+import { Siren, HeartPulse, Flame, AlertTriangle, CheckCheck, Send, Radio, Zap, ArrowLeft, Navigation, MapPin, Clock, Users, Camera, Map, Bell, BellOff } from 'lucide-react'
 import { PhoneNav, PhoneNavProvider, ScreenBackground } from '@/components'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/lib/emergencyStore'
 import { useEmergencyClient } from '@/hooks/useEmergencyClient'
 import { useMeshStore } from '@/lib/meshStore'
+import { getPushState, enablePushAlerts, disablePushAlerts, type PushState } from '@/lib/pushNotifications'
 import { DEVICE_PROFILES } from '@/lib/deviceProfiles'
 import { cn } from '@/lib/utils'
 
@@ -100,6 +101,7 @@ export function ServiceDashboard({ type }: { type: ServiceType }) {
   const [noteText, setNoteText] = useState('')
   const [photoCaption, setPhotoCaption] = useState('')
   const [incMsg, setIncMsg] = useState('')
+  const [pushState, setPushState] = useState<PushState>('unsupported')
   const meta = SERVICE_META[type]
   const Icon = TYPE_ICONS[type]
   const accent = ACCENT[type]
@@ -124,6 +126,20 @@ export function ServiceDashboard({ type }: { type: ServiceType }) {
     const id = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(id)
   }, [activeCount])
+
+  useEffect(() => {
+    getPushState().then(setPushState)
+  }, [])
+
+  const togglePush = async () => {
+    if (pushState === 'on') {
+      await disablePushAlerts(type)
+      setPushState('idle')
+      return
+    }
+    const res = await enablePushAlerts(type, station?.name ?? meta.label)
+    setPushState(res.ok ? 'on' : res.reason === 'denied' ? 'denied' : 'idle')
+  }
 
   const alertDistance = (lat?: number, lng?: number) => {
     if (lat == null || lng == null || !station) return null
@@ -198,6 +214,17 @@ export function ServiceDashboard({ type }: { type: ServiceType }) {
           <span className="flex items-center gap-1 text-[9px] font-mono text-dispatch-textDim ml-auto">
             <MapPin className="h-2.5 w-2.5" />{location.lat.toFixed(4)}, {location.lng.toFixed(4)}
           </span>
+        )}
+        {pushState !== 'unsupported' && (
+          <button
+            onClick={togglePush}
+            className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-[8px] font-black tracking-wider transition-all active:scale-95 ${pushState === 'on' ? 'text-[#22C55E]' : pushState === 'denied' ? 'text-[#DC2626] cursor-not-allowed' : 'text-calm-gold'}`}
+            style={pushState === 'on' ? { background: '#22C55E18', border: '1px solid #22C55E44' } : pushState === 'denied' ? { background: '#DC262610' } : { background: 'rgba(237,180,11,0.12)', border: '1px solid rgba(237,180,11,0.35)' }}
+            disabled={pushState === 'denied'}
+          >
+            {pushState === 'on' ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+            {pushState === 'on' ? 'PUSH ON' : pushState === 'denied' ? 'BLOCKED' : 'ENABLE PUSH'}
+          </button>
         )}
       </div>
 
