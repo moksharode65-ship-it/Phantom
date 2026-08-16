@@ -272,6 +272,16 @@ export function UserApp({ device }: { device: DeviceContext }) {
     }, 1000)
     return () => window.clearInterval(id)
   }, [simDrift, moveTo])
+
+  const [scanTick, setScanTick] = useState(0)
+  useEffect(() => {
+    if (!onboarded) return
+    const id = window.setInterval(() => {
+      client.scan()
+      setScanTick((t) => t + 1)
+    }, 2000)
+    return () => window.clearInterval(id)
+  }, [onboarded, client])
   const [msgText, setMsgText] = useState('')
   const [msgPriority, setMsgPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL')
   const [nodeScan, setNodeScan] = useState(false)
@@ -400,7 +410,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
     if (which === 'location') {
       if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
-          (pos) => client.moveTo(pos.coords.latitude, pos.coords.longitude),
+          (pos) => client.moveTo(pos.coords.latitude, pos.coords.longitude, true),
           () => { /* denied — stays on home coords */ },
           { timeout: 6000, maximumAge: 30000 },
         )
@@ -439,12 +449,13 @@ export function UserApp({ device }: { device: DeviceContext }) {
   )
   const nearbyNodes = meshNodes
     .filter((n) => n.id !== profile.meshNode)
-    .map((n) => ({ node: n, km: nodeDistanceKm(location.lat, location.lng, n.lat, n.lng) }))
-    .sort((a, b) => a.km - b.km)
-  const inRange = nearbyNodes.filter((x) => x.km <= MESH_RANGE_KM)
+    .map((n) => ({ node: n, km: n.lat === 0 && n.lng === 0 ? null : nodeDistanceKm(location.lat, location.lng, n.lat, n.lng) }))
+    .sort((a, b) => (a.km ?? Infinity) - (b.km ?? Infinity))
+  const inRange = nearbyNodes.filter((x) => x.km != null && x.km <= MESH_RANGE_KM)
+  const unknownNodes = nearbyNodes.filter((x) => x.km == null)
   const diagLinks = nearbyNodes.map(({ node, km }) => {
-    const hops = nodeHops(km)
-    return { id: node.id, hops, rssi: Math.round(-40 - km * 12), quality: Math.max(45, Math.min(97, Math.round(100 - km * 9))), relay: hops > 1 }
+    const hops = km == null ? 1 : nodeHops(km)
+    return { id: node.id, hops, rssi: Math.round(-40 - (km ?? 0) * 12), quality: Math.max(45, Math.min(97, Math.round(100 - (km ?? 0) * 9))), relay: hops > 1 }
   })
   const pktSuccess = Math.round(((profile.packets.sent - profile.packets.lost) / profile.packets.sent) * 100)
   const threadMsgs = msgTo ? meshMsgs.filter((m) => m.to === msgTo || m.from === msgTo) : meshMsgs
@@ -1145,7 +1156,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
                     <Zap className="h-3 w-3 text-calm-gold" /> MESH COMPOSER
                   </span>
                   <span className="flex items-center gap-1 text-[8px] font-mono text-calm-textMuted">
-                    <span className="w-1.5 h-1.5 bg-calm-green rounded-full animate-pulse" /> {inRange.length}/{nearbyNodes.length} NODES IN RANGE
+                    <span key={scanTick} className="w-1.5 h-1.5 bg-calm-green rounded-full animate-ping" /> SCANNING… {inRange.length}/{nearbyNodes.length} NODES IN RANGE{unknownNodes.length > 0 ? ` · ${unknownNodes.length} NO GPS` : ''}
                   </span>
                 </div>
 
@@ -1168,23 +1179,30 @@ export function UserApp({ device }: { device: DeviceContext }) {
                 </div>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5">
-                  {inRange.length === 0 && (
-                    <span className="text-[8px] font-mono text-calm-textMuted px-1">No nodes in range</span>
+                  {nearbyNodes.length === 0 && (
+                    <span className="text-[8px] font-mono text-calm-textMuted px-1">Scanning for nodes nearby…</span>
                   )}
-                  {inRange.map(({ node, km }) => {
-                    const hops = nodeHops(km)
+                  {nearbyNodes.map(({ node, km }) => {
+                    const hops = km == null ? null : nodeHops(km)
                     const sel = msgTo === node.id
                     const online = devices.some((d) => d.nodeId === node.id)
+                    const gps = devices.find((d) => d.nodeId === node.id)?.gps !== false
                     return (
                       <button key={node.id} onClick={() => setMsgTo(sel ? '' : node.id)}
                         className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-mono shrink-0 transition-all',
                           sel ? 'border-calm-accent bg-calm-accent text-white' : node.status === 'EMERGENCY' ? 'border-[#DC2626] bg-[#DC2626]/10 text-[#DC2626] animate-pulse' : 'bg-calm-surface border-calm-border text-calm-text')}>
-                        <span className={cn('w-1.5 h-1.5 rounded-full', node.status === 'EMERGENCY' ? 'bg-[#DC2626]' : online ? 'bg-calm-green animate-pulse' : hops <= 1 ? 'bg-calm-green' : 'bg-calm-gold')} />
+                        <span className={cn('w-1.5 h-1.5 rounded-full', node.status === 'EMERGENCY' ? 'bg-[#DC2626]' : online ? 'bg-calm-green animate-pulse' : hops != null && hops <= 1 ? 'bg-calm-green' : 'bg-calm-gold')} />
                         {node.id}
                         {online && (
                           <span className="px-1 rounded text-[6.5px] font-bold text-calm-green">{devices.find((d) => d.nodeId === node.id)?.name ?? 'ONLINE'}</span>
                         )}
-                        <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-border/60')}>{hops} hop{hops > 1 ? 's' : ''}</span>
+                        {!gps ? (
+                          <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-gold/30 text-calm-gold')}>GPS?</span>
+                        ) : km == null ? (
+                          <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-border/60')}>? km</span>
+                        ) : (
+                          <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-border/60')}>{km.toFixed(2)} km · {hops} hop{hops! > 1 ? 's' : ''}</span>
+                        )}
                       </button>
                     )
                   })}

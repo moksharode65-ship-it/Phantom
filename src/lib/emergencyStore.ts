@@ -84,6 +84,7 @@ export interface OnlineDevice {
   name: string
   lat: number
   lng: number
+  gps: boolean
   lastSeen: number
 }
 
@@ -93,6 +94,7 @@ interface EmergencyState {
   devices: OnlineDevice[]
   nearest: Partial<Record<ServiceType, RegisteredService>>
   location: { lat: number; lng: number }
+  gps: boolean
   tracking: TrackingState
   degraded: boolean
   standby: boolean
@@ -114,6 +116,7 @@ interface EmergencyState {
   setDevices: (devices: OnlineDevice[]) => void
   setNearest: (nearest: Partial<Record<ServiceType, RegisteredService>>) => void
   setLocation: (lat: number, lng: number) => void
+  setGps: (gps: boolean) => void
   addAlert: (alert: AlertRecord) => void
   applyMerge: (incidentId: string, patch: { reports?: number; reporters?: string[]; severity?: Severity }) => void
   absorbMerged: (incidentId: string, mergedInto: string, patch: { reports?: number; reporters?: string[]; severity?: Severity }) => void
@@ -153,6 +156,7 @@ export function createEmergencyStore(opts?: { defaultLocation?: { lat: number; l
     devices: [],
     nearest: {},
     location: opts?.defaultLocation ?? DEFAULT_LOCATION,
+    gps: false,
     tracking: 'OFF',
     degraded: false,
     standby: false,
@@ -170,6 +174,7 @@ export function createEmergencyStore(opts?: { defaultLocation?: { lat: number; l
     setDevices: (devices) => set({ devices }),
     setNearest: (nearest) => set({ nearest }),
     setLocation: (lat, lng) => set({ location: { lat, lng } }),
+    setGps: (gps) => set({ gps }),
     addAlert: (alert) =>
       set((s) => {
         let incoming = { ...alert, reports: alert.reports ?? 1, reporters: alert.reporters ?? (alert.sourceId ? [alert.sourceId] : []) }

@@ -206,7 +206,7 @@ class EmergencyClientManager {
     this.registryWs.send(
       JSON.stringify({
         type: join ? 'DEVICE_JOIN' : 'DEVICE_UPDATE',
-        payload: { nodeId: this.options.nodeId, name: this.options.senderName, lat: location.lat, lng: location.lng },
+        payload: { nodeId: this.options.nodeId, name: this.options.senderName, lat: location.lat, lng: location.lng, gps: this.store.getState().gps },
       })
     )
   }
@@ -734,9 +734,10 @@ class EmergencyClientManager {
     incidentBus.publish({ type: 'SAFETY_UPDATE', incidentId, safe })
   }
 
-  moveTo(lat: number, lng: number) {
+  moveTo(lat: number, lng: number, gps = false) {
     const s = this.store.getState()
     s.setLocation(lat, lng)
+    s.setGps(gps)
     if (this.registryWs?.readyState === WebSocket.OPEN) {
       this.registryWs.send(JSON.stringify({ type: 'NEAREST', payload: { lat, lng } }))
       this.announcePresence(false)
@@ -773,8 +774,16 @@ class EmergencyClientManager {
     )
   }
 
+  scan() {
+    if (this.registryWs?.readyState === WebSocket.OPEN) {
+      const { location } = this.store.getState()
+      this.registryWs.send(JSON.stringify({ type: 'NEAREST', payload: { lat: location.lat, lng: location.lng } }))
+      this.announcePresence(false)
+    }
+  }
+
   private beginTracking(lat: number, lng: number) {
-    this.moveTo(lat, lng)
+    this.moveTo(lat, lng, true)
     if (this.trackWatcher != null) return
     this.store.getState().setTracking('ON')
     this.store.getState().addLog('LOCATION', `Live tracking started (${lat.toFixed(4)}, ${lng.toFixed(4)}) — stays on until all services resolve`)
