@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #0a0e1c;
+    --color-gold: #EDB40B;
+  }
+
+  * {
+    @apply border-pantom-border;
+  }
+
+  html {
+    @apply h-full;
+  }
+
+  body {
+    @apply h-full bg-pantom-bg text-pantom-text antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2a2f3e;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3a3f4e;
+  }
+
+  ::selection {
+    background: rgba(237, 180, 11, 0.3);
+    color: white;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-pantom-gold ring-offset-2 ring-offset-pantom-bg;
+  }
+}
+
+@layer components {
+  .phone-frame {
+    aspect-ratio: 390 / 844;
+    width: clamp(200px, 75vw, 340px);
+  }
+
+  @media (min-width: 768px) {
+    .phone-frame {
+      width: min(25vw, 42vh);
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .phone-frame {
+      width: min(28vw, 48vh, 430px);
+    }
+  }
+
+  .glass {
+    @apply bg-pantom-surface/60 backdrop-blur-xl border border-pantom-border/50;
+  }
+
+  .glass-strong {
+    @apply bg-pantom-surface/80 backdrop-blur-2xl border border-pantom-border/80;
+  }
+
+  .glass-gold {
+    @apply bg-pantom-gold/10 backdrop-blur-xl border border-pantom-gold/30;
+  }
+
+  .gradient-gold {
+    @apply bg-gradient-to-b from-white via-white/40 to-transparent bg-clip-text text-transparent;
+  }
+
+  .gradient-green {
+    @apply bg-gradient-to-b from-pantom-green via-pantom-green/40 to-transparent bg-clip-text text-transparent;
+  }
+
+  .animate-fade-slide-up,
+  .animate-fade-slide-down,
+  .animate-fade-slide-left,
+  .animate-fade-slide-right,
+  .animate-scale-in,
+  .animate-fade-in,
+  .animate-speed-reveal {
+    animation-fill-mode: both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .mask-gradient-bottom {
+    mask-image: linear-gradient(to bottom, transparent 0%, black 50%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 50%);
+  }
+}
