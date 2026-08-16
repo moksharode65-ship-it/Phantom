@@ -1,0 +1,16 @@
+{
+  "name": "Phantom Emergency SOS",
+  "short_name": "Phantom SOS",
+  "description": "Emergency mesh SOS — raise alerts, route to the nearest police/hospital/fire station, and track live response.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0e1c",
+  "theme_color": "#0a0e1c",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
