@@ -136,12 +136,6 @@ function OnboardingScreen({
   )
 }
 
-const DEMO_MESH: Message[] = [
-  { id: 'MSG-928173', from: 'PNT-7K9M', to: 'PNT-4B9L', content: 'Network status check', priority: 'NORMAL', route: ['PNT-7K9M', 'PNT-3A2F', 'PNT-4B9L'], directAvailable: false, status: 'DELIVERED', timestamp: Date.now() - 120000, acks: ['NODE_RECV', 'RELAY_CONFIRM', 'E2E_CONFIRM'] },
-  { id: 'MSG-928174', from: 'PNT-7K9M', to: 'PNT-1Z6Q', content: 'High priority relay test', priority: 'HIGH', route: ['PNT-7K9M', 'PNT-1Z6Q'], directAvailable: true, status: 'DELIVERED', timestamp: Date.now() - 45000, acks: ['NODE_RECV', 'E2E_CONFIRM'] },
-  { id: 'MSG-928175', from: 'PNT-7K9M', to: 'PNT-9H3R', content: 'Urgent: route optimization needed', priority: 'URGENT', route: ['PNT-7K9M', 'PNT-8K1M', 'PNT-2E7Y', 'PNT-9H3R'], directAvailable: false, status: 'RELAYING', timestamp: Date.now() - 8000, acks: ['NODE_RECV', 'RELAY_CONFIRM'] },
-]
-
 const MSG_STATUS: Record<Message['status'], { color: string; label: string }> = {
   QUEUED: { color: '#94A3B8', label: 'QUEUED' },
   TRANSMITTING: { color: '#3B82F6', label: 'TRANSMITTING' },
@@ -445,7 +439,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
   })
   const pktSuccess = Math.round(((profile.packets.sent - profile.packets.lost) / profile.packets.sent) * 100)
   const threadMsgs = msgTo ? meshMsgs.filter((m) => m.to === msgTo || m.from === msgTo) : meshMsgs
-  const shownMsgs = msgTo ? threadMsgs.slice().reverse() : (meshMsgs.length ? meshMsgs : DEMO_MESH).slice().reverse()
+  const shownMsgs = msgTo ? threadMsgs.slice().reverse() : meshMsgs.slice().reverse()
   const sendMeshMsg = () => {
     const to = msgTo.trim().toUpperCase()
     const target = meshNodes.find((n) => n.id === to)
@@ -1183,6 +1177,11 @@ export function UserApp({ device }: { device: DeviceContext }) {
                 </div>
 
                 <div className="rounded-xl border border-calm-border bg-calm-surface divide-y divide-calm-border">
+                  {!msgTo && meshMsgs.length === 0 && (
+                    <div className="px-3 py-3 text-center">
+                      <p className="text-[8px] font-mono text-calm-textDim">No mesh messages yet — your node {profile.meshNode} is ready. Messages appear here when another device is in range.</p>
+                    </div>
+                  )}
                   {msgTo && threadMsgs.length === 0 && (
                     <div className="px-3 py-3 text-center">
                       <p className="text-[8px] font-mono text-calm-textDim">No messages with {msgTo} yet — send the first one below</p>
