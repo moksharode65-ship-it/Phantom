@@ -206,7 +206,7 @@ class EmergencyClientManager {
     this.registryWs.send(
       JSON.stringify({
         type: join ? 'DEVICE_JOIN' : 'DEVICE_UPDATE',
-        payload: { nodeId: this.options.nodeId, name: this.options.senderName, lat: location.lat, lng: location.lng, gps: this.store.getState().gps },
+        payload: { nodeId: this.options.nodeId, name: this.options.senderName, lat: location.lat, lng: location.lng, gps: this.store.getState().gps, accuracy: this.store.getState().accuracy },
       })
     )
   }
@@ -360,6 +360,7 @@ class EmergencyClientManager {
     }
     if (m.type === 'DEVICES') {
       s.setDevices(m.payload.devices || [])
+      this.adoptPeerLocation()
     }
     if (m.type === 'MESH_MSG') {
       const p = m.payload
@@ -387,6 +388,7 @@ class EmergencyClientManager {
             lat: location.lat,
             lng: location.lng,
             gps: this.store.getState().gps,
+            accuracy: this.store.getState().accuracy,
           },
         }),
       )
@@ -398,9 +400,10 @@ class EmergencyClientManager {
         const existing = cur.find((d) => d.nodeId === p.nodeId)
         this.store.getState().setDevices(
           existing
-            ? cur.map((d) => (d.nodeId === p.nodeId ? { ...d, lat: p.lat ?? d.lat, lng: p.lng ?? d.lng, gps: p.gps !== false, lastSeen: Date.now() } : d))
-            : [...cur, { nodeId: p.nodeId, name: p.name || p.nodeId, lat: p.lat ?? 0, lng: p.lng ?? 0, gps: p.gps !== false, lastSeen: Date.now() }],
+            ? cur.map((d) => (d.nodeId === p.nodeId ? { ...d, lat: p.lat ?? d.lat, lng: p.lng ?? d.lng, gps: p.gps !== false, accuracy: Number.isFinite(p.accuracy) ? p.accuracy : d.accuracy, lastSeen: Date.now() } : d))
+            : [...cur, { nodeId: p.nodeId, name: p.name || p.nodeId, lat: p.lat ?? 0, lng: p.lng ?? 0, gps: p.gps !== false, accuracy: Number.isFinite(p.accuracy) ? p.accuracy : null, lastSeen: Date.now() }],
         )
+        this.adoptPeerLocation()
       }
     }
   }
@@ -762,10 +765,12 @@ class EmergencyClientManager {
     incidentBus.publish({ type: 'SAFETY_UPDATE', incidentId, safe })
   }
 
-  moveTo(lat: number, lng: number, gps = false) {
+  moveTo(lat: number, lng: number, gps = false, accuracy: number | null = null) {
     const s = this.store.getState()
     s.setLocation(lat, lng)
     s.setGps(gps)
+    s.setAccuracy(accuracy)
+    s.setLocVia(null)
     if (this.registryWs?.readyState === WebSocket.OPEN) {
       this.registryWs.send(JSON.stringify({ type: 'NEAREST', payload: { lat, lng } }))
       this.announcePresence(false)
@@ -793,13 +798,32 @@ class EmergencyClientManager {
     if (this.trackWatcher != null) return
     this.store.getState().setTracking('REQUESTING')
     navigator.geolocation.getCurrentPosition(
-      (pos) => this.beginTracking(pos.coords.latitude, pos.coords.longitude),
+      (pos) => this.beginTracking(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
       () => {
         this.store.getState().setTracking('DENIED')
         this.store.getState().addLog('LOCATION', 'Location permission denied — using default coords')
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     )
+  }
+
+  private adoptPeerLocation() {
+    const s = this.store.getState()
+    if (s.tracking === 'ON') return
+    const peers = s.devices.filter((d) => d.gps && Number.isFinite(d.lat) && d.lat !== 0)
+    if (peers.length === 0) return
+    const myAcc = s.accuracy ?? Infinity
+    const best = peers
+      .map((d) => ({ d, acc: Number.isFinite(d.accuracy) ? (d.accuracy as number) : Infinity }))
+      .sort((a, b) => a.acc - b.acc)[0]
+    if (s.gps && myAcc <= best.acc) return
+    if (!s.gps || best.acc < myAcc) {
+      s.setLocation(best.d.lat, best.d.lng)
+      s.setAccuracy(best.acc)
+      s.setLocVia(best.d.nodeId)
+      s.addLog('LOCATION', `Position adopted from ${best.d.name || best.d.nodeId} (±${Math.round(best.acc)}m fix)`)
+      this.announcePresence(false)
+    }
   }
 
   scan() {
@@ -809,15 +833,16 @@ class EmergencyClientManager {
       this.announcePresence(false)
       this.registryWs.send(JSON.stringify({ type: 'MESH_SCAN', payload: { nodeId: this.options.nodeId } }))
     }
+    this.adoptPeerLocation()
   }
 
-  private beginTracking(lat: number, lng: number) {
-    this.moveTo(lat, lng, true)
+  private beginTracking(lat: number, lng: number, accuracy?: number | null) {
+    this.moveTo(lat, lng, true, accuracy ?? null)
     if (this.trackWatcher != null) return
     this.store.getState().setTracking('ON')
-    this.store.getState().addLog('LOCATION', `Live tracking started (${lat.toFixed(4)}, ${lng.toFixed(4)}) — stays on until all services resolve`)
+    this.store.getState().addLog('LOCATION', `Live tracking started (${lat.toFixed(4)}, ${lng.toFixed(4)}${accuracy != null ? ` ±${Math.round(accuracy)}m` : ''}) — stays on until all services resolve`)
     this.trackWatcher = navigator.geolocation.watchPosition(
-      (pos) => this.moveTo(pos.coords.latitude, pos.coords.longitude),
+      (pos) => this.moveTo(pos.coords.latitude, pos.coords.longitude, true, pos.coords.accuracy),
       () => {},
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
     )

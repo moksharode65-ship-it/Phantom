@@ -159,6 +159,8 @@ export function UserApp({ device }: { device: DeviceContext }) {
   const chat = store((s) => s.chat)
   const location = store((s) => s.location)
   const tracking = store((s) => s.tracking)
+  const accuracy = store((s) => s.accuracy)
+  const locVia = store((s) => s.locVia)
   const degraded = store((s) => s.degraded)
   const standby = store((s) => s.standby)
   const blocked = store((s) => s.blocked)
@@ -410,9 +412,9 @@ export function UserApp({ device }: { device: DeviceContext }) {
     if (which === 'location') {
       if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
-          (pos) => client.moveTo(pos.coords.latitude, pos.coords.longitude, true),
+          () => client.requestLocation(),
           () => { /* denied — stays on home coords */ },
-          { timeout: 6000, maximumAge: 30000 },
+          { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 },
         )
       }
       setPerms((p) => ({ ...p, location: true }))
@@ -733,8 +735,8 @@ export function UserApp({ device }: { device: DeviceContext }) {
             {/* SOS */}
             <div className="flex items-center justify-center gap-5 py-3">
               <div className="text-right">
-                <p className="text-[8px] font-mono text-calm-textDim tabular-nums">{location.lat.toFixed(4)}, {location.lng.toFixed(4)}</p>
-                <p className="text-[8px] font-mono text-calm-textDim flex items-center justify-end gap-1"><MapPin className="h-2.5 w-2.5" />{tracking === 'ON' ? 'LIVE TRACKING' : 'LAST KNOWN'}</p>
+                <p className="text-[8px] font-mono text-calm-textDim tabular-nums">{location.lat.toFixed(4)}, {location.lng.toFixed(4)}{accuracy != null ? <span className={cn(accuracy > 150 ? 'text-calm-gold' : 'text-calm-green')}> ±{Math.round(accuracy)}m</span> : null}</p>
+                <p className="text-[8px] font-mono text-calm-textDim flex items-center justify-end gap-1"><MapPin className="h-2.5 w-2.5" />{tracking === 'ON' ? 'LIVE TRACKING' : locVia ? `VIA ${locVia}` : 'LAST KNOWN'}</p>
               </div>
               <motion.button
                 onPointerDown={() => {
@@ -1186,7 +1188,9 @@ export function UserApp({ device }: { device: DeviceContext }) {
                     const hops = km == null ? null : nodeHops(km)
                     const sel = msgTo === node.id
                     const online = devices.some((d) => d.nodeId === node.id)
-                    const gps = devices.find((d) => d.nodeId === node.id)?.gps !== false
+                    const dev = devices.find((d) => d.nodeId === node.id)
+                    const gps = dev?.gps !== false
+                    const peerAcc = dev?.accuracy != null ? (dev.accuracy as number) : null
                     return (
                       <button key={node.id} onClick={() => setMsgTo(sel ? '' : node.id)}
                         className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-mono shrink-0 transition-all',
@@ -1194,9 +1198,11 @@ export function UserApp({ device }: { device: DeviceContext }) {
                         <span className={cn('w-1.5 h-1.5 rounded-full', node.status === 'EMERGENCY' ? 'bg-[#DC2626]' : online ? 'bg-calm-green animate-pulse' : hops != null && hops <= 1 ? 'bg-calm-green' : 'bg-calm-gold')} />
                         {node.id}
                         {online && (
-                          <span className="px-1 rounded text-[6.5px] font-bold text-calm-green">{devices.find((d) => d.nodeId === node.id)?.name ?? 'ONLINE'}</span>
+                          <span className="px-1 rounded text-[6.5px] font-bold text-calm-green">{dev?.name ?? 'ONLINE'}</span>
                         )}
-                        {!gps ? (
+                        {peerAcc != null ? (
+                          <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-border/60')}>±{Math.round(peerAcc)}m</span>
+                        ) : !gps ? (
                           <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-gold/30 text-calm-gold')}>GPS?</span>
                         ) : km == null ? (
                           <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-border/60')}>? km</span>
@@ -1365,6 +1371,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
                     {nearbyNodes.map(({ node, km }) => {
                       const dev = devices.find((d) => d.nodeId === node.id)
                       const gps = dev?.gps !== false
+                      const peerAcc = dev?.accuracy != null ? (dev.accuracy as number) : null
                       const ageS = dev ? Math.max(0, Math.round((Date.now() - dev.lastSeen) / 1000)) : null
                       const hops = km == null ? null : nodeHops(km)
                       return (
@@ -1374,7 +1381,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
                           <span className="font-mono text-[9px] text-calm-text flex-none">{node.id}</span>
                           <span className="text-[8px] font-bold text-calm-textMuted truncate min-w-0 flex-1">{dev?.name ?? '—'}</span>
                           <span className="font-mono text-[7.5px] text-calm-textMuted flex-none">
-                            {!gps ? 'GPS?' : km == null ? '? km' : `${km.toFixed(2)} km · ${hops} hop${hops! > 1 ? 's' : ''}`}
+                            {peerAcc != null ? `±${Math.round(peerAcc)}m` : !gps ? 'GPS?' : km == null ? '? km' : `${km.toFixed(2)} km · ${hops} hop${hops! > 1 ? 's' : ''}`}
                           </span>
                           <span className={cn('font-mono text-[7px] flex-none', ageS != null && ageS <= 4 ? 'text-calm-green' : 'text-calm-textMuted')}>
                             {ageS != null ? (ageS <= 4 ? 'LIVE' : `${ageS}s ago`) : ''}
@@ -1473,7 +1480,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
                       ['OS', profile.os],
                       ['BATTERY', `${profile.battery}%`],
                       ['SIGNAL', `${profile.signalDbm} dBm`],
-                      ['LOCATION', `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`],
+                      ['LOCATION', `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}${accuracy != null ? ` ±${Math.round(accuracy)}m` : ''}${locVia ? ` VIA ${locVia}` : ''}`],
                     ] as const
                   ).map(([k, v]) => (
                     <div key={k} className="flex items-center justify-between border-b border-calm-border/60 pb-0.5">
