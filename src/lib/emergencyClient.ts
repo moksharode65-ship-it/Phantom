@@ -191,6 +191,11 @@ class EmergencyClientManager {
     liveClients.add(this)
   }
 
+  setIdentity(senderName: string, sourceId: string) {
+    this.options.senderName = senderName
+    this.options.sourceId = sourceId
+  }
+
   start() {
     if (this.started) return
     this.started = true

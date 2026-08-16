@@ -300,4 +300,4 @@ export function createEmergencyStore(opts?: { defaultLocation?: { lat: number; l
   )
 }
 
-export const useEmergencyStore = createEmergencyStore({ persistKey: 'pantom-device-a' })
+export const useEmergencyStore = createEmergencyStore({ persistKey: 'pantom-phone' })
