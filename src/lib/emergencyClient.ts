@@ -3,11 +3,14 @@
 import { useEmergencyStore, SERVICE_META, type EmergencyStore, type ServiceType, type Severity, type RegisteredService } from '@/lib/emergencyStore'
 import { useMeshStore } from '@/lib/meshStore'
 
-const REGISTRY_URL = 'ws://localhost:5000'
+// Endpoint config: set VITE_WS_URL to the deployed backend gateway (e.g. https://app.up.railway.app)
+// and the client reaches /registry, /police, /hospital, /fire through the single port.
+const WS_BASE = (import.meta.env.VITE_WS_URL as string | undefined)?.trim().replace(/\/+$/, '')
+const REGISTRY_URL = WS_BASE ? `${WS_BASE}/registry` : 'ws://localhost:5000'
 const SERVICE_URLS: Record<ServiceType, string> = {
-  POLICE: 'ws://localhost:5001',
-  HOSPITAL: 'ws://localhost:5002',
-  FIRE: 'ws://localhost:5003',
+  POLICE: WS_BASE ? `${WS_BASE}/police` : 'ws://localhost:5001',
+  HOSPITAL: WS_BASE ? `${WS_BASE}/hospital` : 'ws://localhost:5002',
+  FIRE: WS_BASE ? `${WS_BASE}/fire` : 'ws://localhost:5003',
 }
 const RECONNECT_BASE_MS = 1500
 
@@ -289,8 +292,14 @@ class EmergencyClientManager {
   }
 
   private restFallback(type: ServiceType, payload: unknown) {
-    const port = 5001 + ['POLICE', 'HOSPITAL', 'FIRE'].indexOf(type)
-    fetch(`http://localhost:${port}/api/actions`, {
+    let url: string
+    if (WS_BASE) {
+      const httpBase = WS_BASE.startsWith('wss://') ? `https://${WS_BASE.slice(6)}` : `http://${WS_BASE.slice(5)}`
+      url = `${httpBase}/${type.toLowerCase()}/api/actions`
+    } else {
+      url = `http://localhost:${5001 + TYPES.indexOf(type)}/api/actions`
+    }
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
