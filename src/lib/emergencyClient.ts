@@ -375,6 +375,34 @@ class EmergencyClientManager {
         })
       }
     }
+    if (m.type === 'MESH_SCAN' && m.payload?.from) {
+      const { location } = this.store.getState()
+      this.registryWs?.send(
+        JSON.stringify({
+          type: 'MESH_SCAN_RESPONSE',
+          payload: {
+            to: m.payload.from,
+            nodeId: this.options.nodeId,
+            name: this.options.senderName,
+            lat: location.lat,
+            lng: location.lng,
+            gps: this.store.getState().gps,
+          },
+        }),
+      )
+    }
+    if (m.type === 'MESH_SCAN_RESPONSE') {
+      const p = m.payload
+      if (p && p.nodeId) {
+        const cur = this.store.getState().devices
+        const existing = cur.find((d) => d.nodeId === p.nodeId)
+        this.store.getState().setDevices(
+          existing
+            ? cur.map((d) => (d.nodeId === p.nodeId ? { ...d, lat: p.lat ?? d.lat, lng: p.lng ?? d.lng, gps: p.gps !== false, lastSeen: Date.now() } : d))
+            : [...cur, { nodeId: p.nodeId, name: p.name || p.nodeId, lat: p.lat ?? 0, lng: p.lng ?? 0, gps: p.gps !== false, lastSeen: Date.now() }],
+        )
+      }
+    }
   }
 
   private onServiceMessage(type: ServiceType, m: any) {
@@ -779,6 +807,7 @@ class EmergencyClientManager {
       const { location } = this.store.getState()
       this.registryWs.send(JSON.stringify({ type: 'NEAREST', payload: { lat: location.lat, lng: location.lng } }))
       this.announcePresence(false)
+      this.registryWs.send(JSON.stringify({ type: 'MESH_SCAN', payload: { nodeId: this.options.nodeId } }))
     }
   }
 

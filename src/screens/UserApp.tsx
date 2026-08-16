@@ -1351,7 +1351,41 @@ export function UserApp({ device }: { device: DeviceContext }) {
                     <p className="text-[8px] font-bold tracking-widest text-calm-textMuted">LINK DIAGNOSTICS</p>
                     <span className="font-mono text-[9px] text-calm-gold">{inRange.length} / {nearbyNodes.length}</span>
                   </div>
-                  <div className="rounded-xl border border-calm-border bg-calm-surface divide-y divide-calm-border">
+<div className="rounded-xl border border-calm-border bg-calm-surface">
+                  <div className="px-3 py-1.5 border-b border-calm-border flex items-center justify-between">
+                    <span className="text-[8px] font-black tracking-widest text-calm-textMuted">SURROUNDING NODES — {nearbyNodes.length} DISCOVERED</span>
+                    <span className="flex items-center gap-1 text-[7.5px] font-mono text-calm-textMuted">
+                      <span className="w-1 h-1 bg-calm-green rounded-full animate-ping" /> SCAN #{scanTick}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-calm-border max-h-40 overflow-y-auto scrollbar-thin">
+                    {nearbyNodes.length === 0 && (
+                      <div className="px-3 py-3 text-[8px] font-mono text-calm-textDim">No nodes discovered yet — scanning surroundings…</div>
+                    )}
+                    {nearbyNodes.map(({ node, km }) => {
+                      const dev = devices.find((d) => d.nodeId === node.id)
+                      const gps = dev?.gps !== false
+                      const ageS = dev ? Math.max(0, Math.round((Date.now() - dev.lastSeen) / 1000)) : null
+                      const hops = km == null ? null : nodeHops(km)
+                      return (
+                        <button key={node.id} onClick={() => setMsgTo(node.id)}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-calm-border/40 transition-colors">
+                          <span className={cn('w-1.5 h-1.5 rounded-full flex-none', node.status === 'EMERGENCY' ? 'bg-[#DC2626] animate-pulse' : gps ? 'bg-calm-green animate-pulse' : 'bg-calm-gold')} />
+                          <span className="font-mono text-[9px] text-calm-text flex-none">{node.id}</span>
+                          <span className="text-[8px] font-bold text-calm-textMuted truncate min-w-0 flex-1">{dev?.name ?? '—'}</span>
+                          <span className="font-mono text-[7.5px] text-calm-textMuted flex-none">
+                            {!gps ? 'GPS?' : km == null ? '? km' : `${km.toFixed(2)} km · ${hops} hop${hops! > 1 ? 's' : ''}`}
+                          </span>
+                          <span className={cn('font-mono text-[7px] flex-none', ageS != null && ageS <= 4 ? 'text-calm-green' : 'text-calm-textMuted')}>
+                            {ageS != null ? (ageS <= 4 ? 'LIVE' : `${ageS}s ago`) : ''}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-calm-border bg-calm-surface divide-y divide-calm-border">
                     {diagLinks.map((l) => (
                       <div key={l.id} className="flex items-center gap-2 px-2.5 py-1.5">
                         <span className="font-mono text-[9px] text-calm-gold w-16 flex-none">{l.id}</span>
