@@ -79,9 +79,18 @@ export interface Notice {
   text: string
 }
 
+export interface OnlineDevice {
+  nodeId: string
+  name: string
+  lat: number
+  lng: number
+  lastSeen: number
+}
+
 interface EmergencyState {
   conn: Record<ServiceType | 'REGISTRY', ConnState>
   services: RegisteredService[]
+  devices: OnlineDevice[]
   nearest: Partial<Record<ServiceType, RegisteredService>>
   location: { lat: number; lng: number }
   tracking: TrackingState
@@ -102,6 +111,7 @@ interface EmergencyState {
   clearChat: () => void
   clearAlerts: () => void
   setServices: (services: RegisteredService[]) => void
+  setDevices: (devices: OnlineDevice[]) => void
   setNearest: (nearest: Partial<Record<ServiceType, RegisteredService>>) => void
   setLocation: (lat: number, lng: number) => void
   addAlert: (alert: AlertRecord) => void
@@ -140,6 +150,7 @@ export function createEmergencyStore(opts?: { defaultLocation?: { lat: number; l
   const stateCreator: StateCreator<EmergencyState, [], [], EmergencyState> = (set) => ({
     conn: { REGISTRY: 'CONNECTING', POLICE: 'CONNECTING', HOSPITAL: 'CONNECTING', FIRE: 'CONNECTING' },
     services: [],
+    devices: [],
     nearest: {},
     location: opts?.defaultLocation ?? DEFAULT_LOCATION,
     tracking: 'OFF',
@@ -156,6 +167,7 @@ export function createEmergencyStore(opts?: { defaultLocation?: { lat: number; l
     setDegraded: (on) => set({ degraded: on }),
     setStandby: (on) => set({ standby: on }),
     setServices: (services) => set({ services }),
+    setDevices: (devices) => set({ devices }),
     setNearest: (nearest) => set({ nearest }),
     setLocation: (lat, lng) => set({ location: { lat, lng } }),
     addAlert: (alert) =>

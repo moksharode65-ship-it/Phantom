@@ -121,8 +121,8 @@ function loadPhoneProfile(): DeviceProfile {
 // module singletons so the FABRIC dispatch consoles stay in sync with this phone.
 export function createPhoneDevice(): DeviceContext {
   const profile = loadPhoneProfile()
-  emergencyClient.setIdentity(profile.deviceName, profile.userId)
-  const meshStore = createMeshStore(profile.home.lat, profile.home.lng, profile.meshNode, [])
+  emergencyClient.setIdentity(profile.deviceName, profile.userId, profile.meshNode)
+  const meshStore = createMeshStore(profile.home.lat, profile.home.lng, profile.meshNode, [], { seeded: false })
   const messageStore = createMessageStore('pantom-phone-messages')
   const langStore = createI18nStore('pantom-phone-lang')
   return {

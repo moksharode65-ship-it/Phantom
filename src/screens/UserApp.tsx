@@ -276,8 +276,17 @@ export function UserApp({ device }: { device: DeviceContext }) {
   const [msgPriority, setMsgPriority] = useState<'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL')
   const [nodeScan, setNodeScan] = useState(false)
   const [standbyHint, setStandbyHint] = useState(false)
-  const meshNodes = meshStore((s) => s.nodes)
+  const meshStoreNodes = meshStore((s) => s.nodes)
   const setNodeEmergency = meshStore((s) => s.setNodeEmergency)
+  const devices = store((s) => s.devices)
+  const meshNodes = useMemo(() => {
+    const byId = new globalThis.Map<string, { id: string; lat: number; lng: number; status: 'NORMAL' | 'EMERGENCY'; incidentId?: string }>(meshStoreNodes.map((n) => [n.id, n]))
+    for (const d of devices) {
+      const ex = byId.get(d.nodeId)
+      byId.set(d.nodeId, ex ? { ...ex, lat: d.lat, lng: d.lng } : { id: d.nodeId, lat: d.lat, lng: d.lng, status: 'NORMAL' })
+    }
+    return [...byId.values()]
+  }, [meshStoreNodes, devices])
   const pois = usePoiStore((s) => s.pois)
   const poiStatus = usePoiStore((s) => s.status)
   const fetchNearby = usePoiStore((s) => s.fetchNearby)
@@ -450,6 +459,7 @@ export function UserApp({ device }: { device: DeviceContext }) {
     if (!route) return
     const sent = sendMesh({ from: profile.meshNode, to, content: msgText.trim(), priority: msgPriority, directAvailable: route.path.length === 2, route: route.path })
     meshMessageBus.publish({ id: sent.id, from: sent.from, to: sent.to, content: sent.content, priority: sent.priority, route: sent.route, timestamp: sent.timestamp })
+    client.sendMeshMessage({ id: sent.id, from: sent.from, to: sent.to, content: sent.content, priority: sent.priority, route: sent.route })
     if (msgPriority === 'URGENT') {
       const { incidentId } = sendAlert('HIGH', `MESH EMERGENCY — node ${to} requires emergency assistance (${route.path.length - 1} hops via ${route.path.slice(1, -1).join(' → ') || 'direct'})`)
       setNodeEmergency(to, incidentId)
@@ -1164,12 +1174,16 @@ export function UserApp({ device }: { device: DeviceContext }) {
                   {inRange.map(({ node, km }) => {
                     const hops = nodeHops(km)
                     const sel = msgTo === node.id
+                    const online = devices.some((d) => d.nodeId === node.id)
                     return (
                       <button key={node.id} onClick={() => setMsgTo(sel ? '' : node.id)}
                         className={cn('flex items-center gap-1.5 px-2 py-1.5 rounded-xl border text-[8px] font-mono shrink-0 transition-all',
                           sel ? 'border-calm-accent bg-calm-accent text-white' : node.status === 'EMERGENCY' ? 'border-[#DC2626] bg-[#DC2626]/10 text-[#DC2626] animate-pulse' : 'bg-calm-surface border-calm-border text-calm-text')}>
-                        <span className={cn('w-1.5 h-1.5 rounded-full', node.status === 'EMERGENCY' ? 'bg-[#DC2626]' : hops <= 1 ? 'bg-calm-green' : 'bg-calm-gold')} />
+                        <span className={cn('w-1.5 h-1.5 rounded-full', node.status === 'EMERGENCY' ? 'bg-[#DC2626]' : online ? 'bg-calm-green animate-pulse' : hops <= 1 ? 'bg-calm-green' : 'bg-calm-gold')} />
                         {node.id}
+                        {online && (
+                          <span className="px-1 rounded text-[6.5px] font-bold text-calm-green">{devices.find((d) => d.nodeId === node.id)?.name ?? 'ONLINE'}</span>
+                        )}
                         <span className={cn('px-1 rounded text-[6.5px] font-bold', sel ? 'bg-white/20' : 'bg-calm-border/60')}>{hops} hop{hops > 1 ? 's' : ''}</span>
                       </button>
                     )

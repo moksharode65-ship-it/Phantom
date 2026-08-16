@@ -32,11 +32,12 @@ export function createMeshStore(
   senderLng = 72.86,
   senderId = SENDER_NODE_ID,
   extra: [string, number, number][] = [['PNT-2B8D', 0.005, 0.005]],
+  opts?: { seeded?: boolean },
 ) {
   const nodes: MeshNode[] = [
     { id: senderId, lat: senderLat, lng: senderLng, status: 'NORMAL' },
     ...extra.map(([id, dLat, dLng]) => ({ id, lat: senderLat + dLat, lng: senderLng + dLng, status: 'NORMAL' as NodeStatus })),
-    ...SEED.map(([id, dLat, dLng]) => ({ id, lat: senderLat + dLat, lng: senderLng + dLng, status: 'NORMAL' as NodeStatus })),
+    ...(opts?.seeded === false ? [] : SEED.map(([id, dLat, dLng]) => ({ id, lat: senderLat + dLat, lng: senderLng + dLng, status: 'NORMAL' as NodeStatus }))),
   ]
 
   return create<{
@@ -45,6 +46,7 @@ export function createMeshStore(
     resolveNodeEmergency: (id: string) => void
     resolveByIncident: (incidentId: string) => void
     addNode: (lat: number, lng: number) => MeshNode
+    upsertNode: (node: { id: string; lat: number; lng: number; status?: NodeStatus; incidentId?: string }) => void
   }>()((set) => ({
     nodes,
     setNodeEmergency: (id, incidentId) =>
@@ -63,6 +65,12 @@ export function createMeshStore(
       set((s) => ({ nodes: [...s.nodes, node] }))
       return node
     },
+    upsertNode: (node) =>
+      set((s) => {
+        const existing = s.nodes.find((n) => n.id === node.id)
+        if (existing) return { nodes: s.nodes.map((n) => (n.id === node.id ? { ...n, lat: node.lat, lng: node.lng } : n)) }
+        return { nodes: [...s.nodes, { ...node, status: node.status || 'NORMAL' }] }
+      }),
   }))
 }
 

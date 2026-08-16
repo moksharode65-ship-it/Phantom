@@ -2,6 +2,7 @@
 
 import { useEmergencyStore, SERVICE_META, type EmergencyStore, type ServiceType, type Severity, type RegisteredService } from '@/lib/emergencyStore'
 import { useMeshStore } from '@/lib/meshStore'
+import { meshMessageBus } from '@/lib/meshStore'
 
 // Endpoint config: set VITE_WS_URL to the deployed backend gateway (e.g. https://app.up.railway.app)
 // and the client reaches /registry, /police, /hospital, /fire through the single port.
@@ -164,6 +165,7 @@ export interface AlertOptions {
 export interface EmergencyClientOptions {
   senderName?: string
   sourceId?: string
+  nodeId?: string
 }
 
 const liveClients = new Set<EmergencyClientManager>()
@@ -178,6 +180,7 @@ class EmergencyClientManager {
   private retries: Record<string, number> = {}
   private disposed = false
   private started = false
+  private presenceBeat: number | null = null
   private queue: { key: string; payload: unknown }[] = []
   private trackWatcher: number | null = null
   private trackUnsub: (() => void) | null = null
@@ -187,13 +190,29 @@ class EmergencyClientManager {
 
   constructor(store: EmergencyStore, options: EmergencyClientOptions = {}) {
     this.store = store
-    this.options = { senderName: 'YOU', sourceId: 'USER-MOB-01', ...options }
+    this.options = { senderName: 'YOU', sourceId: 'USER-MOB-01', nodeId: 'PNT-7K9M', ...options }
     liveClients.add(this)
   }
 
-  setIdentity(senderName: string, sourceId: string) {
+  setIdentity(senderName: string, sourceId: string, nodeId?: string) {
     this.options.senderName = senderName
     this.options.sourceId = sourceId
+    if (nodeId) this.options.nodeId = nodeId
+  }
+
+  private announcePresence(join: boolean) {
+    if (!this.registryWs || this.registryWs.readyState !== WebSocket.OPEN) return
+    const { location } = this.store.getState()
+    this.registryWs.send(
+      JSON.stringify({
+        type: join ? 'DEVICE_JOIN' : 'DEVICE_UPDATE',
+        payload: { nodeId: this.options.nodeId, name: this.options.senderName, lat: location.lat, lng: location.lng },
+      })
+    )
+  }
+
+  sendMeshMessage(msg: { id: string; from: string; to: string; content: string; priority: string; route: string[] }) {
+    return this.sendTo('REGISTRY', { type: 'MESH_SEND', payload: msg })
   }
 
   start() {
@@ -210,6 +229,10 @@ class EmergencyClientManager {
   stop() {
     this.disposed = true
     this.started = false
+    if (this.presenceBeat != null) {
+      clearInterval(this.presenceBeat)
+      this.presenceBeat = null
+    }
     this.registryWs?.close()
     TYPES.forEach((t) => this.serviceWs[t]?.close())
     this.registryWs = null
@@ -245,6 +268,9 @@ class EmergencyClientManager {
       if (isRegistry) {
         const { location } = this.store.getState()
         this.registryWs?.send(JSON.stringify({ type: 'NEAREST', payload: { lat: location.lat, lng: location.lng } }))
+        this.announcePresence(true)
+        if (this.presenceBeat != null) clearInterval(this.presenceBeat)
+        this.presenceBeat = window.setInterval(() => this.announcePresence(false), 10000)
         this.store.getState().addLog('REGISTRY', 'Connected to central registry :5000')
       }
     }
@@ -330,6 +356,23 @@ class EmergencyClientManager {
     if (m.type === 'LOG') {
       if (['REGISTER', 'RE_REGISTER', 'OFFLINE', 'DEREGISTER'].includes(m.payload.kind)) {
         s.addLog('REGISTRY', `[${m.payload.kind}] ${m.payload.name || m.payload.id || ''}`.trim())
+      }
+    }
+    if (m.type === 'DEVICES') {
+      s.setDevices(m.payload.devices || [])
+    }
+    if (m.type === 'MESH_MSG') {
+      const p = m.payload
+      if (p && p.to === this.options.nodeId && p.id && p.from && p.content) {
+        meshMessageBus.publish({
+          id: p.id,
+          from: p.from,
+          to: p.to,
+          content: p.content,
+          priority: p.priority || 'NORMAL',
+          route: Array.isArray(p.route) ? p.route : [p.from, p.to],
+          timestamp: p.timestamp || Date.now(),
+        })
       }
     }
   }
@@ -696,6 +739,7 @@ class EmergencyClientManager {
     s.setLocation(lat, lng)
     if (this.registryWs?.readyState === WebSocket.OPEN) {
       this.registryWs.send(JSON.stringify({ type: 'NEAREST', payload: { lat, lng } }))
+      this.announcePresence(false)
     }
     const locPayload = JSON.stringify({ type: 'LOCATION_UPDATE', payload: { lat, lng } })
     TYPES.forEach((t) => {
